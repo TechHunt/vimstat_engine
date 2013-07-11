@@ -12,7 +12,6 @@
 struct vimstat_s {
     /* Common link format is http://vimeo.com/XXXXXXXX */
     char link[25+1];
-    char title[200+1];
     long nviews;
     long nlikes;
     long ncomments;
@@ -44,11 +43,11 @@ void usage(int status)
     if (status){
         printf("Try `--help' for more information.\n");
     } else {
-        printf("Usage: %s [OPTIONS].. < url-file\n"
+        printf("Usage: %s [OPTIONS]... < url-file\n"
                "\n"
                "Possible options:\n"
-               "  --help    output this message and exit\n"
-               "  --html    output as html <table> row\n" , program_name);
+               "  --html    output as html <table> row\n"
+               "  --help    output this message and exit\n", program_name);
     }
     exit(status);
 }
@@ -80,16 +79,15 @@ static char *vimstat_tools_installed()
 
 static FILE *vimstat_open_pipe(char *url)
 {
-    /* sed s/^.*['\"]\(.*\)['\"].*$/\1/g
+    /* sed s/^.*\"\(.*\)\".*$/\1/g
      * This regular expression matches things that I need, like:
      * content="UserPlays:xxx"
      * content="UserLikes:xxx"
      * content="UserComments:xxx"
-     * google_hints='qwerty'
      */
     char *cmd_fmt = "wget -qO- %s 2>" DEV_NULL "|"
-    "grep -i -e google_hints -e userplays -e userlikes -e usercomments|"
-    "sed s/^.*['\\\"]\\(.*\\)['\\\"].*$/\\1/g";
+    "grep -i -e userplays -e userlikes -e usercomments|"
+    "sed s/^.*\\\"\\(.*\\)\\\".*$/\\1/g";
     const size_t cmd_len = strlen(cmd_fmt) - 2 /*%s*/ + 25 /*URL len.*/;
     char cmd[cmd_len+1];
     static FILE *p;
@@ -111,8 +109,7 @@ static int vimstat_is_obj_valid(struct vimstat_s *stat)
 {
     /* Require text fields to contain something and
      * numeric fields to contain positive values.*/
-    return *(stat->title) &&
-           stat->nviews >=0 &&
+    return stat->nviews >=0 &&
            stat->nlikes >=0 &&
            stat->ncomments >=0;
 }
@@ -120,7 +117,6 @@ static int vimstat_is_obj_valid(struct vimstat_s *stat)
 static void vimstat_print_text(struct vimstat_s *stat)
 {
     printf("Link: %s\n", stat->link);
-    printf("Title: %s\n", stat->title);
     printf("Views: %lu\n", stat->nviews);
     printf("Likes: %lu\n", stat->nlikes);
     printf("Comments: %lu\n", stat->ncomments);
@@ -130,7 +126,7 @@ static void vimstat_print_text(struct vimstat_s *stat)
 static void vimstat_print_html(struct vimstat_s *stat)
 {
     printf("<tr>");
-    printf("<td><a href=\"%s\">%s</a></td>", stat->link, stat->title);
+    printf("<td><a href=\"%s\">%s</a></td>", stat->link, stat->link);
     printf("<td>%lu</td>", stat->nviews);
     printf("<td>%lu</td>", stat->nlikes);
     printf("<td>%lu</td>", stat->ncomments);
@@ -166,30 +162,16 @@ static struct vimstat_s *vimstat_stat_url(char *url)
         /* Assume that each line preceeded by one of
          * UserPlays, UserlLikes or UserComments prefixes.
          */
-        if (strnicmp(buf, "userplays:", 10)==0){
+        if (strncmp(buf, "UserPlays:", 10)==0){
             tmp_stat.nviews = atol(buf+10);
-        } else if (strnicmp(buf, "userlikes:", 10)==0){
+        } else if (strncmp(buf, "UserLikes:", 10)==0){
             tmp_stat.nlikes = atol(buf+10);
-        } else if (strnicmp(buf, "usercomments:", 13)==0){
+        } else if (strncmp(buf, "UserComments:", 13)==0){
             tmp_stat.ncomments = atol(buf+13);
-        } else {
-            /* Assume that line not preceded by any of prefixes above
-             * contains video title. Unreliable!
-             */
-            strncpy(tmp_stat.title, buf, 200);
         }
     }
     pclose(pipe_in);
 
-    /* Remove newlines from title and link
-     * to make pretty output.
-     */
-    if ((substr = strrchr(tmp_stat.title, '\n'))){
-        *substr = '\0';
-    }
-    if ((substr = strrchr(tmp_stat.link, '\n'))){
-        *substr = '\0';
-    }
     /* If I get invalid values from URL, then
      * die or what?
      */
@@ -221,7 +203,7 @@ int main(int argc, char *argv[])
         } else if (strcmp(argv[narg], "--html") == 0){
             vimstat_print = vimstat_print_html;
         } else {
-            printf("Invalid agrument: %s\n", argv[narg]);
+            warn("Invalid agrument: %s\n", argv[narg]);
             usage(-1);
         }
     }
