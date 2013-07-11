@@ -58,13 +58,11 @@ static char *vimstat_tools_installed()
     char *cmds[] = {
         "wget --version 1>" DEV_NULL " 2>" DEV_NULL,
         "grep --version 1>" DEV_NULL " 2>" DEV_NULL,
-        "sed --version 1>" DEV_NULL " 2>" DEV_NULL,
         NULL
     };
     char *errmsg[] = {
         "Wget not installed.\n",
         "Grep not installed.\n",
-        "Sed not installed.\n",
         NULL
     };
 
@@ -79,15 +77,8 @@ static char *vimstat_tools_installed()
 
 static FILE *vimstat_open_pipe(char *url)
 {
-    /* sed s/^.*\"\(.*\)\".*$/\1/g
-     * This regular expression matches things that I need, like:
-     * content="UserPlays:xxx"
-     * content="UserLikes:xxx"
-     * content="UserComments:xxx"
-     */
     char *cmd_fmt = "wget -qO- %s 2>" DEV_NULL "|"
-    "grep -i -e userplays -e userlikes -e usercomments|"
-    "sed s/^.*\\\"\\(.*\\)\\\".*$/\\1/g";
+    "grep -i -e userplays -e userlikes -e usercomments";
     const size_t cmd_len = strlen(cmd_fmt) - 2 /*%s*/ + 25 /*URL len.*/;
     char cmd[cmd_len+1];
     static FILE *p;
@@ -159,15 +150,15 @@ static struct vimstat_s *vimstat_stat_url(char *url)
     strncpy(tmp_stat.link, url, 25);
 
     while (fgets(buf, sizeof(buf), pipe_in) != NULL) {
-        /* Assume that each line preceeded by one of
-         * UserPlays, UserlLikes or UserComments prefixes.
+        /* Assume that each line contains one of
+         * UserPlays, UserlLikes or UserComments keywords.
          */
-        if (strncmp(buf, "UserPlays:", 10)==0){
-            tmp_stat.nviews = atol(buf+10);
-        } else if (strncmp(buf, "UserLikes:", 10)==0){
-            tmp_stat.nlikes = atol(buf+10);
-        } else if (strncmp(buf, "UserComments:", 13)==0){
-            tmp_stat.ncomments = atol(buf+13);
+         if ((substr = strstr(buf, "UserPlays:"))){
+            tmp_stat.nviews = atol(substr+10);
+        } else if ((substr = strstr(buf, "UserLikes:"))){
+            tmp_stat.nlikes = atol(substr+10);
+        } else if ((substr = strstr(buf, "UserComments:"))){
+            tmp_stat.ncomments = atol(substr+13);
         }
     }
     pclose(pipe_in);
@@ -192,7 +183,7 @@ int main(int argc, char *argv[])
     void (*vimstat_print)(struct vimstat_s *stat) = vimstat_print_text;
 
     program_name = argv[0];
-    /* Check if wget, grep, sed are installed. */
+    /* Check if wget, grep are installed. */
     if ( (error_msg = vimstat_tools_installed()) != NULL ){
         die(error_msg);
     }
